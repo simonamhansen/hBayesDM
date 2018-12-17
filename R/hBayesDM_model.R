@@ -160,7 +160,9 @@ hBayesDM_model <- function(task_name,
     }
 
     # Load the data
-    if (is.character(data)) {
+    if (is.data.frame(data)) {
+      raw_data <- data.table::as.data.table(data)
+    } else if (is.character(data)) {
       if (data == "example") {
         if (model_type == "")
           exampleData <- paste0(task_name, "_", "exampleData.txt")
@@ -171,23 +173,16 @@ hBayesDM_model <- function(task_name,
       } else if (data == "choose") {
         data <- file.choose()
       } else {
-        if (!file.exists(data)) {
-          stop("** The data file does not exist following the given path. **")
-        }
+        # Check if data file exists
+        if (!file.exists(data))
+          stop("** Data file does not exist. Please check again. **\n",
+               "  e.g. data = \"MySubFolder/myData.txt\"\n")
       }
 
       raw_data <- data.table::fread(file = data, header = TRUE, sep = "\t", data.table = TRUE,
                                     fill = TRUE, stringsAsFactors = TRUE, logical01 = FALSE)
-    } else if (is.data.frame(data)) {
-      raw_data <- data.table::as.data.table(data)
     } else {
       stop("** Invalid argument for data. It should be a filepath or a data.frame. **")
-    }
-
-    # Check if data file exists
-    if (!file.exists(data)) {
-      stop("** Data file does not exist. Please check again. **\n",
-           "  e.g. data = \"MySubFolder/myData.txt\"\n")
     }
 
     # NOTE: Separator is fixed to "\t" because fread() has trouble reading space delimited files
@@ -359,7 +354,13 @@ hBayesDM_model <- function(task_name,
     # Print for user
     cat("\n")
     cat("Model name  =", model, "\n")
-    cat("Data file   =", data, "\n")
+    if (is.data.frame(data)) {
+      cat("Data file   = data.frame(",
+          do.call(paste, c(as.list(dim(data)), list(sep = " x "))),
+          ")\n")
+    } else {
+      cat("Data file   =", data, "\n")
+    }
     cat("\n")
     cat("Details:\n")
     if (vb) {
