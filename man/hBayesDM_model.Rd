@@ -6,7 +6,8 @@
 \usage{
 hBayesDM_model(task_name, model_name, model_type = "", data_columns,
   parameters, regressors = NULL, postpreds = "y_pred",
-  stanmodel_arg = NULL, preprocess_func)
+  stanmodel_arg = NULL, use_hierarchical = NULL,
+  use_block_design = NULL, preprocess_func)
 }
 \arguments{
 \item{task_name}{Character value for name of task. E.g. \code{"gng"}.}
@@ -34,6 +35,11 @@ this model, \code{NULL}.}
 \item{stanmodel_arg}{Leave as \code{NULL} (default) for completed models. Else should either be a
 character value (specifying the name of a Stan file) OR a \code{stanmodel} object (returned as
 a result of running \code{\link[rstan]{stan_model}}).}
+
+\item{use_hierarchical}{Whether to use group-level parameters corresponding
+to given \code{parameters}.}
+
+\item{use_block_design}{Whether to use block-wise parameter estimation.}
 
 \item{preprocess_func}{Function to preprocess the raw data before it gets passed to Stan. Takes
 (at least) two arguments: a data.table object \code{raw_data} and a list object
@@ -84,6 +90,10 @@ Contributor: \href{https://ccs-lab.github.io/team/jethro-lee/}{Jethro Lee}
   corresponding name will be used for model fitting. If this argument is passed a
   \code{stanmodel} object, that \code{stanmodel} object will be used for model fitting. When
   creation of the model function is complete, this argument should just be left as \code{NULL}.
+
+\strong{use_hierarhical}
+
+\strong{use_block_design}
 
 \strong{preprocess_func} is the part of the code that is specific to the model, and is thus
   written in the specific model R file.\cr

@@ -34,6 +34,9 @@
 #' @param stanmodel_arg Leave as \code{NULL} (default) for completed models. Else should either be a
 #'   character value (specifying the name of a Stan file) OR a \code{stanmodel} object (returned as
 #'   a result of running \code{\link[rstan]{stan_model}}).
+#' @param use_hierarchical Whether to use group-level parameters corresponding
+#'   to given \code{parameters}.
+#' @param use_block_design Whether to use block-wise parameter estimation.
 #' @param preprocess_func Function to preprocess the raw data before it gets passed to Stan. Takes
 #'   (at least) two arguments: a data.table object \code{raw_data} and a list object
 #'   \code{general_info}. Possible to include additional argument(s) to use during preprocessing.
@@ -76,6 +79,10 @@
 #'   \code{stanmodel} object, that \code{stanmodel} object will be used for model fitting. When
 #'   creation of the model function is complete, this argument should just be left as \code{NULL}.
 #'
+#' \strong{use_hierarhical}
+#'
+#' \strong{use_block_design}
+#'
 #' \strong{preprocess_func} is the part of the code that is specific to the model, and is thus
 #'   written in the specific model R file.\cr
 #' Arguments for this function are:
@@ -111,7 +118,17 @@ hBayesDM_model <- function(task_name,
                            regressors = NULL,
                            postpreds = "y_pred",
                            stanmodel_arg = NULL,
+                           use_hierarchical = NULL,
+                           use_block_design = NULL,
                            preprocess_func) {
+
+  if (is.null(use_hierarchical)) {
+    use_hierarchical <- model_type != "single"
+  }
+
+  if (is.null(use_block_design)) {
+    use_block_design <- model_type != "multipleB"
+  }
 
   # The resulting hBayesDM model function to be returned
   function(data           = "choose",
@@ -142,16 +159,29 @@ hBayesDM_model <- function(task_name,
       stop("** Posterior predictions are not yet available for this model. **\n")
     }
 
-    # For using "example" or "choose" data
-    if (data == "example") {
-      if (model_type == "") {
-        exampleData <- paste0(task_name, "_", "exampleData.txt")
+    # Load the data
+    if (is.character(data)) {
+      if (data == "example") {
+        if (model_type == "")
+          exampleData <- paste0(task_name, "_", "exampleData.txt")
+        else
+          exampleData <- paste0(task_name, "_", model_type, "_", "exampleData.txt")
+
+        data <- system.file("extdata", exampleData, package = "hBayesDM")
+      } else if (data == "choose") {
+        data <- file.choose()
       } else {
-        exampleData <- paste0(task_name, "_", model_type, "_", "exampleData.txt")
+        if (!file.exists(data)) {
+          stop("** The data file does not exist following the given path. **")
+        }
       }
-      data <- system.file("extdata", exampleData, package = "hBayesDM")
-    } else if (data == "choose") {
-      data <- file.choose()
+
+      raw_data <- data.table::fread(file = data, header = TRUE, sep = "\t", data.table = TRUE,
+                                    fill = TRUE, stringsAsFactors = TRUE, logical01 = FALSE)
+    } else if (is.data.frame(data)) {
+      raw_data <- data.table::as.data.table(data)
+    } else {
+      stop("** Invalid argument for data. It should be a filepath or a data.frame. **")
     }
 
     # Check if data file exists
@@ -160,9 +190,6 @@ hBayesDM_model <- function(task_name,
            "  e.g. data = \"MySubFolder/myData.txt\"\n")
     }
 
-    # Load the data
-    raw_data <- data.table::fread(file = data, header = TRUE, sep = "\t", data.table = TRUE,
-                                  fill = TRUE, stringsAsFactors = TRUE, logical01 = FALSE)
     # NOTE: Separator is fixed to "\t" because fread() has trouble reading space delimited files
     # that have missing values.
 
@@ -170,7 +197,6 @@ hBayesDM_model <- function(task_name,
     colnames_raw_data <- colnames(raw_data)
 
     # Check if necessary data columns all exist (while ignoring case and underscores)
-    ..insensitive_data_columns <- NULL  # To avoid NOTEs by R CMD check
     insensitive_data_columns <- tolower(gsub("_", "", data_columns, fixed = TRUE))
     colnames(raw_data) <- tolower(gsub("_", "", colnames(raw_data), fixed = TRUE))
     if (!all(insensitive_data_columns %in% colnames(raw_data))) {
@@ -179,7 +205,7 @@ hBayesDM_model <- function(task_name,
     }
 
     # Remove only the rows containing NAs in necessary columns
-    complete_rows       <- complete.cases(raw_data[, ..insensitive_data_columns])
+    complete_rows       <- complete.cases(raw_data[, insensitive_data_columns, with = FALSE])
     sum_incomplete_rows <- sum(!complete_rows)
     if (sum_incomplete_rows > 0) {
       raw_data <- raw_data[complete_rows, ]
@@ -210,17 +236,7 @@ hBayesDM_model <- function(task_name,
     .N <- NULL
     subjid <- NULL
 
-    if ((model_type == "") || (model_type == "single")) {
-      DT_trials <- raw_data[, .N, by = "subjid"]
-      subjs     <- DT_trials$subjid
-      n_subj    <- length(subjs)
-      t_subjs   <- DT_trials$N
-      t_max     <- max(t_subjs)
-      if ((model_type == "single") && (n_subj != 1)) {
-        stop("** More than 1 unique subjects exist in data file,",
-             " while using 'single' type model. **\n")
-      }
-    } else {  # (model_type == "multipleB")
+    if (use_block_design) {
       DT_trials <- raw_data[, .N, by = c("subjid", "block")]
       DT_blocks <- DT_trials[, .N, by = "subjid"]
       subjs     <- DT_blocks$subjid
@@ -228,12 +244,24 @@ hBayesDM_model <- function(task_name,
       b_subjs   <- DT_blocks$N
       b_max     <- max(b_subjs)
       t_subjs   <- array(0, c(n_subj, b_max))
+
       for (i in 1:n_subj) {
         subj <- subjs[i]
         b <- b_subjs[i]
         t_subjs[i, 1:b] <- DT_trials[subjid == subj]$N
       }
       t_max     <- max(t_subjs)
+    } else {
+      DT_trials <- raw_data[, .N, by = "subjid"]
+      subjs     <- DT_trials$subjid
+      n_subj    <- length(subjs)
+      t_subjs   <- DT_trials$N
+      t_max     <- max(t_subjs)
+    }
+
+    if ((model_type == "single") && (n_subj != 1)) {
+      stop("** More than 1 unique subjects exist in data file,",
+           " while using 'single' type model. **\n")
     }
 
     general_info <- list(subjs, n_subj, b_subjs, b_max, t_subjs, t_max)
@@ -250,7 +278,7 @@ hBayesDM_model <- function(task_name,
 
     # The parameters of interest for Stan
     pars <- character()
-    if (model_type != "single") {
+    if (use_hierarchical) {
       pars <- c(pars, paste0("mu_", names(parameters)), "sigma")
     }
     pars <- c(pars, names(parameters))
@@ -276,13 +304,8 @@ hBayesDM_model <- function(task_name,
         stop("** Length of 'inits' must be ", length(parameters),
              " (= the number of parameters of this model). Please check again. **\n")
       }
-      if (model_type == "single") {
-        gen_init <- function() {
-          individual_level        <- as.list(inits)
-          names(individual_level) <- names(parameters)
-          return(individual_level)
-        }
-      } else {
+
+      if (use_hierarchical) {
         gen_init <- function() {
           primes <- numeric(length(parameters))
           for (i in 1:length(parameters)) {
@@ -301,6 +324,12 @@ hBayesDM_model <- function(task_name,
           individual_level        <- lapply(primes, function(x) rep(x, n_subj))
           names(individual_level) <- paste0(names(parameters), "_pr")
           return(c(group_level, individual_level))
+        }
+      } else {
+        gen_init <- function() {
+          individual_level        <- as.list(inits)
+          names(individual_level) <- names(parameters)
+          return(individual_level)
         }
       }
     }
@@ -342,16 +371,16 @@ hBayesDM_model <- function(task_name,
       cat(" # of burn-in samples           =", nwarmup, "\n")
     }
     cat(" # of subjects                  =", n_subj, "\n")
-    if (model_type == "multipleB") {
+    if (use_block_design) {
       cat(" # of (max) blocks per subject  =", b_max, "\n")
     }
-    if (model_type == "") {
-      cat(" # of (max) trials per subject  =", t_max, "\n")
-    } else if (model_type == "multipleB") {
+    if (model_type == "single") {
+      cat(" # of trials (for this subject) =", t_max, "\n")
+    } else if (use_block_design) {
       cat(" # of (max) trials...\n")
       cat("      ...per block per subject  =", t_max, "\n")
     } else {
-      cat(" # of trials (for this subject) =", t_max, "\n")
+      cat(" # of (max) trials per subject  =", t_max, "\n")
     }
 
     # Models with additional arguments
