@@ -17,3 +17,7 @@ indent_size = 2
 
 [*.{c,h,cpp,hpp}]
 indent_size = 4
+
+[Makevars*]
+indent_style = tab
+indent_size = 4

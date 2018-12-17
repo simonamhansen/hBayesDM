@@ -11,12 +11,12 @@ OBJECTS = $(SOURCES:.stan=.o) init.o
 all: $(SHLIB)
 
 clean:
-		rm -rf "$(SOURCE_PATH)/*.o"
-		rm -rf *.so *.o
-		rm -rf "$(SOURCE_PATH)/*.cc"
-		rm -rf "$(SOURCE_PATH)/*.hpp"
+	rm -rf "$(SOURCE_PATH)/*.o"
+	rm -rf *.so *.o
+	rm -rf "$(SOURCE_PATH)/*.cc"
+	rm -rf "$(SOURCE_PATH)/*.hpp"
 
 %.cc: %.stan
-		"$(R_HOME)/bin$(R_ARCH_BIN)/Rscript" -e "source(file.path('..', 'tools', 'make_cc.R')); make_cc(commandArgs(TRUE))" $<
+	"$(R_HOME)/bin$(R_ARCH_BIN)/Rscript" -e "source(file.path('..', 'tools', 'make_cc.R')); make_cc(commandArgs(TRUE))" $<
 
 .phony: all clean
