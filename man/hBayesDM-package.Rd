@@ -19,7 +19,8 @@ Bolded tasks, followed by their respective models, are itemized below.
                            Linear Ballistic Accumulator (LBA) model --- \link{choiceRT_lba} \cr
                            Linear Ballistic Accumulator (LBA) model for a single subject --- \link{choiceRT_lba_single}}
  \item{\strong{Choice under Risk and Ambiguity}}{Exponential model --- \link{cra_exp} \cr
-                                                 Linear model --- \link{cra_linear}}
+                                                 Linear model --- \link{cra_linear} \cr
+                                                 Mean-Variance model --- \link{cra_mv}}
  \item{\strong{Description-Based Decision Making}}{probability weight function --- \link{dbdm_prob_weight}}
  \item{\strong{Delay Discounting}}{Constant Sensitivity --- \link{dd_cs} \cr
                                    Constant Sensitivity for a single subject --- \link{dd_cs_single} \cr
